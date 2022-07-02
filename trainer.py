@@ -96,8 +96,7 @@ class Trainer:
                 print(traceback.format_exc())
 
             with test_summary_writer.as_default():
-                if len(self.history.losses) > 0:
-                    tf.summary.scalar('loss', self.history.losses[-1], step=self.step)
+                tf.summary.scalar('loss', self.history.losses[-1], step=self.step)
                 tf.summary.scalar('num_trials', np.mean(num_trials), step=self.step)
 
             self.step += 1

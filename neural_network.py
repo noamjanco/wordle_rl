@@ -3,6 +3,7 @@ from tensorflow.keras import layers,models
 import keras
 import numpy as np
 from typing import List, Union
+import keras_nlp
 
 from state import ObservedState
 
@@ -41,24 +42,30 @@ def loss_function(y_true,y_pred):
 
 def build_q_sa_model(num_words: int):
     model = models.Sequential()
-    model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(6,5,4), kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
+    model.add(layers.Reshape((6,20),input_shape=(6,5,4,)))
+    model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
+    # model.add(layers.Reshape((120,),input_shape=(6,20,)))
 
-    # model.add(layers.MaxPooling2D((2, 2)))
-    model.add(layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
+    # model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(6,5,4), kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
+    #
+    # # model.add(layers.MaxPooling2D((2, 2)))
+    # model.add(layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
 
     # model.add(layers.MaxPooling2D((2, 2)))
     model.add(layers.Flatten())
     model.add(layers.Dense(128, activation='relu'))
+
     model.add(layers.Dense(num_words))
     # states = keras.layers.Input((-1,6,5,4))
 
-    # opt = keras.optimizers.SGD(learning_rate=0.00001) #previously working
+    opt = keras.optimizers.SGD(learning_rate=0.00001) #previously working
     # opt = keras.optimizers.SGD(learning_rate=0.000001) #previously working
-    opt = keras.optimizers.SGD(learning_rate=0.00000001) #previously working
+    # opt = keras.optimizers.SGD(learning_rate=0.00000001) #previously working
     # opt = keras.optimizers.SGD(learning_rate=0.0001) #slightly worse
     # opt = keras.optimizers.Adam(learning_rate=0.0001)
 
     model.compile(optimizer=opt, loss=loss_function)
+    model.build()
     model.summary()
     return model
 
