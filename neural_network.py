@@ -1,12 +1,17 @@
 import tensorflow as tf
-from tensorflow.keras import layers,models
-import keras
 import numpy as np
 from typing import List, Union
 import keras_nlp
-
+import string
 from state import ObservedState
 
+alphabet = string.ascii_lowercase
+num_features = len(alphabet) + 3
+
+def string_vectorizer(strng):
+    vector = [[0 if char != letter else 1 for char in alphabet]
+                  for letter in strng]
+    return vector
 
 def preprocess(states: Union[ObservedState, List[ObservedState]]) -> np.ndarray:
     """
@@ -16,9 +21,14 @@ def preprocess(states: Union[ObservedState, List[ObservedState]]) -> np.ndarray:
     """
     if not isinstance(states, List):
         states = [states]
-    processed_states = np.zeros((len(states),6,5,4))
+    processed_states = np.zeros((len(states),6,5,num_features))
     for i, state in enumerate(states):
-        processed_states[i] = np.concatenate([np.expand_dims(state.prev_actions,axis=-1),
+        one_hot_letter_encoding = np.zeros((6,5,len(alphabet)))
+        if len(state.prev_actions_str) > 0:
+            one_hot_letter_encoding[:len(state.prev_actions_str)] = np.asarray([string_vectorizer(str(action)[2:-1])
+                                                                                for action in state.prev_actions_str])
+
+        processed_states[i] = np.concatenate([one_hot_letter_encoding,
                                               np.expand_dims(state.grey_letters,axis=-1),
                                               np.expand_dims(state.green_letters,axis=-1),
                                               np.expand_dims(state.yellow_letters,axis=-1)],axis=-1)
@@ -41,9 +51,13 @@ def loss_function(y_true,y_pred):
     return loss
 
 def build_q_sa_model(num_words: int):
-    model = models.Sequential()
-    model.add(layers.Reshape((6,20),input_shape=(6,5,4,)))
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Reshape((6,5*num_features),input_shape=(6,5,num_features)))
+    # model.add(tf.keras.layers.Dense(32, activation='relu'))
+    model.add(tf.keras.layers.Dense(32))
     model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
+    # model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
+    # model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
     # model.add(layers.Reshape((120,),input_shape=(6,20,)))
 
     # model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(6,5,4), kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
@@ -52,13 +66,13 @@ def build_q_sa_model(num_words: int):
     # model.add(layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
 
     # model.add(layers.MaxPooling2D((2, 2)))
-    model.add(layers.Flatten())
-    model.add(layers.Dense(128, activation='relu'))
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dense(128, activation='relu'))
 
-    model.add(layers.Dense(num_words))
+    model.add(tf.keras.layers.Dense(num_words))
     # states = keras.layers.Input((-1,6,5,4))
 
-    opt = keras.optimizers.SGD(learning_rate=0.00001) #previously working
+    opt = tf.keras.optimizers.SGD(learning_rate=0.00001) #previously working
     # opt = keras.optimizers.SGD(learning_rate=0.000001) #previously working
     # opt = keras.optimizers.SGD(learning_rate=0.00000001) #previously working
     # opt = keras.optimizers.SGD(learning_rate=0.0001) #slightly worse

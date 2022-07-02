@@ -27,8 +27,8 @@ class GameState:
         :return: None.
         """
         self.observed_state.prev_actions_str.append(action)
-        action_letters = np.array([(ord(letter) - 0.5*(ord('z')+ ord('a')))/(ord('z') - ord('a')) for letter in str(action)[2:-1]])
-        self.observed_state.prev_actions[self.observed_state.trial] = action_letters
+        # action_letters = np.array([(ord(letter) - 0.5*(ord('z')+ ord('a')))/(ord('z') - ord('a')) for letter in str(action)[2:-1]])
+        # self.observed_state.prev_actions[self.observed_state.trial] = action_letters
 
         green_letters = np.array([action_letter == true_letter for (action_letter, true_letter) in zip(action,self.hidden_state)])
         self.observed_state.green_letters[self.observed_state.trial] = green_letters
