@@ -18,7 +18,8 @@ class GameState:
         Constructor for game state.
         :param all_words: List of all allowed words in the game.
         """
-        self.hidden_state = all_words[np.random.choice(len(all_words))]
+        self.hidden_word_idx = np.random.choice(len(all_words))
+        self.hidden_state = all_words[self.hidden_word_idx]
         self.observed_state = ObservedState()
         self.all_words = all_words
 

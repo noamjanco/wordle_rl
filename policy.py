@@ -20,8 +20,8 @@ class Policy:
             idx = np.random.choice(num_words)
             return idx
         else:
-            all_q_sa = q_sa.predict(preprocess(state))[0]
-
+            network_output = q_sa.predict(preprocess(state))[0]
+            all_q_sa, _ = np.split(network_output, 2, axis=-1)
             # prevent selection of previously selected actions
             if len(state.prev_actions_idx) > 0:
                 all_q_sa[np.array(state.prev_actions_idx)] = -1e6

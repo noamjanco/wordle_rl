@@ -4,6 +4,7 @@ from typing import List, Union
 import keras_nlp
 import string
 from state import ObservedState
+from keras import Model
 
 alphabet = string.ascii_lowercase
 num_features = len(alphabet) + 3
@@ -34,53 +35,68 @@ def preprocess(states: Union[ObservedState, List[ObservedState]]) -> np.ndarray:
                                               np.expand_dims(state.yellow_letters,axis=-1)],axis=-1)
     return processed_states
 
-def loss_function(y_true,y_pred):
+def qsa_error_loss_function(y_true, y_pred):
     """
-
     :param y_true: N x 2 tensor, concatenation of targets and actions
     :param y_pred: N x NUM_Words tensor
     :return:
     targets: N x 1
     targets - y_pred: N x Num_Words
     """
-    targets, actions = tf.split(y_true,num_or_size_splits=2,axis=-1)
-    actions_one_hot = tf.one_hot(tf.cast(tf.squeeze(actions,axis=-1),tf.int32),depth=y_pred.shape[-1])
-    # loss = tf.math.reduce_mean(tf.math.reduce_mean(tf.math.multiply(tf.math.pow(targets - y_pred, 2), actions_one_hot), axis=0),axis=0)
-    loss = tf.math.reduce_mean(tf.math.reduce_sum(tf.math.multiply(tf.math.pow(targets - y_pred, 2), actions_one_hot), axis=-1),axis=-1)
+    qsa_prediction, _ = tf.split(y_pred, 2, axis=-1)
+    targets, actions, _ = tf.split(y_true, num_or_size_splits=3, axis=-1)
+    actions_one_hot = tf.one_hot(tf.cast(tf.squeeze(actions, axis=-1), tf.int32), depth=qsa_prediction.shape[-1])
+    loss = tf.math.reduce_mean(
+        tf.math.reduce_sum(tf.math.multiply(tf.math.pow(targets - qsa_prediction, 2), actions_one_hot), axis=-1),
+        axis=-1)
 
     return loss
 
+def word_prediction_loss_function(y_true,y_pred):
+    """
+    :param y_true: N x 2 tensor, concatenation of targets and actions
+    :param y_pred: N x NUM_Words tensor
+    :return:
+    targets: N x 1
+    targets - y_pred: N x Num_Words
+    """
+    _, word_idx_logits = tf.split(y_pred, 2, axis=-1)
+    _, _, hidden_words_idx = tf.split(y_true,num_or_size_splits=3,axis=-1)
+
+    scce_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    word_prediction_scce_loss = scce_loss(hidden_words_idx, word_idx_logits)
+
+    return word_prediction_scce_loss
+
+def total_loss(y_true,y_pred):
+    qsa_error_loss = qsa_error_loss_function(y_true, y_pred)
+    word_prediction_loss = word_prediction_loss_function(y_true, y_pred)
+    return qsa_error_loss + 1000 * word_prediction_loss
+
 def build_q_sa_model(num_words: int):
-    model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.Reshape((6,5*num_features),input_shape=(6,5,num_features)))
-    # model.add(tf.keras.layers.Dense(32, activation='relu'))
-    model.add(tf.keras.layers.Dense(32))
-    model.add(tf.keras.layers.LayerNormalization())
-    model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
-    # model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
-    # model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
-    # model.add(layers.Reshape((120,),input_shape=(6,20,)))
+    x = tf.keras.layers.Input((6,5,num_features))
+    y = tf.keras.layers.Reshape((6,5*num_features),input_shape=(6,5,num_features))(x)
+    
+    y = tf.keras.layers.Dense(32)(y)
+    y = tf.keras.layers.LayerNormalization()(y)
+    y = keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8)(y)
 
-    # model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(6,5,4), kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
-    #
-    # # model.add(layers.MaxPooling2D((2, 2)))
-    # model.add(layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer=tf.keras.initializers.RandomNormal(mean=0., stddev=1.)))
+    y = tf.keras.layers.Flatten()(y)
+    z = tf.keras.layers.Dense(128, activation='relu')(y)
+    z = tf.keras.layers.LayerNormalization()(z)
 
-    # model.add(layers.MaxPooling2D((2, 2)))
-    model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(128, activation='relu'))
-    model.add(tf.keras.layers.LayerNormalization())
-    model.add(tf.keras.layers.Dense(num_words))
-    # states = keras.layers.Input((-1,6,5,4))
+    q_sa_head = tf.keras.layers.Dense(num_words)(z)
+    predicted_word_head = tf.keras.layers.Dense(num_words)(z)
+
+    output = tf.concat([q_sa_head, predicted_word_head], axis=-1)
+
+    model = Model(inputs=x, outputs=output)
 
     opt = tf.keras.optimizers.SGD(learning_rate=0.00001) #previously working
-    # opt = keras.optimizers.SGD(learning_rate=0.000001) #previously working
-    # opt = keras.optimizers.SGD(learning_rate=0.00000001) #previously working
-    # opt = keras.optimizers.SGD(learning_rate=0.0001) #slightly worse
-    # opt = keras.optimizers.Adam(learning_rate=0.0001)
 
-    model.compile(optimizer=opt, loss=loss_function)
-    model.build()
+
+    model.compile(optimizer=opt, loss=total_loss, metrics=[qsa_error_loss_function, word_prediction_loss_function])
+    # model.build()
     model.summary()
     return model
 

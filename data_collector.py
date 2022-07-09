@@ -1,6 +1,6 @@
 import tensorflow as tf
 import os
-from neural_network import loss_function, preprocess
+from neural_network import preprocess, total_loss, qsa_error_loss_function, word_prediction_loss_function
 import time
 from joblib import Parallel, delayed
 import pickle
@@ -77,6 +77,7 @@ class DataCollector:
         replay_actions = []
         replay_rewards = []
         replay_next_states = []
+        replay_hidden_words_idx = []
         td_targets = []
         num_trials = []
 
@@ -84,7 +85,9 @@ class DataCollector:
         timeout = 3
         while timeout_cnt < timeout:
             try:
-                q_sa = tf.keras.models.load_model(model_path, custom_objects={'loss_function': loss_function})
+                q_sa = tf.keras.models.load_model(model_path, custom_objects={'total_loss': total_loss,
+                                                                              'qsa_error_loss_function': qsa_error_loss_function,
+                                                                              'word_prediction_loss_function': word_prediction_loss_function})
                 break
             except:
                 print('failed loading model due to race, sleeping for 3 seconds')
@@ -96,7 +99,7 @@ class DataCollector:
         policy = Policy(epsilon, len(words), q_sa)
         play = Play(words)
         for p in range(num_plays_in_node):
-            states, actions, rewards, next_states, actions_idx = play.play(policy=policy)
+            states, actions, rewards, next_states, actions_idx, hidden_words_idx = play.play(policy=policy)
             # targets = compute_td_targets(states, actions, rewards, next_states, q_sa, gamma)
             targets = compute_mc_targets(states, actions, rewards, next_states, gamma)
 
@@ -105,6 +108,7 @@ class DataCollector:
             replay_rewards.extend(rewards)
             replay_next_states.extend(next_states)
             td_targets.extend(targets)
+            replay_hidden_words_idx.extend(hidden_words_idx)
             num_trials.append(len(states))
 
-        return replay_states, replay_actions, replay_rewards, replay_next_states, td_targets, num_trials
+        return replay_states, replay_actions, replay_rewards, replay_next_states, td_targets, num_trials, replay_hidden_words_idx

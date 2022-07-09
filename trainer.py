@@ -15,9 +15,13 @@ class LossHistory(keras.callbacks.Callback):
     def __init__(self):
         super(LossHistory, self).__init__()
         self.losses = []
+        self.qsa_error_losses = []
+        self.word_prediction_losses = []
 
     def on_batch_end(self, batch, logs={}):
         self.losses.append(logs.get('loss'))
+        self.qsa_error_losses.append(logs.get('qsa_error_loss_function'))
+        self.word_prediction_losses.append(logs.get('word_prediction_loss_function'))
 
 class Trainer:
     def __init__(self, words, num_iterations, model_path, data_path, replay_size, n_jobs, num_plays_in_node, epochs=100):
@@ -33,6 +37,7 @@ class Trainer:
         self.step = 0
 
     def start(self):
+        #todo: roll back
         self.run()
         p = multiprocessing.Process(name='trainer', target=self.run)
         p.start()
@@ -76,29 +81,34 @@ class Trainer:
             replay_actions = []
             replay_rewards = []
             replay_next_states = []
+            replay_hidden_words_idx = []
             td_targets = []
             num_trials = []
             for result in results:
-                states, actions, rewards, next_states, targets, trials = result
+                states, actions, rewards, next_states, targets, trials, hidden_words_idx = result
                 replay_states.extend(states)
                 replay_actions.extend(actions)
                 replay_rewards.extend(rewards)
                 replay_next_states.extend(next_states)
                 td_targets.extend(targets)
                 num_trials.extend(trials)
+                replay_hidden_words_idx.extend(hidden_words_idx)
 
             try:
                 q_sa.fit(x=preprocess(replay_states),
-                         y=np.array([td_targets, replay_actions]).T,
+                         y=np.array([td_targets, replay_actions, replay_hidden_words_idx]).T,
                          epochs=self.epochs,
                          callbacks=[self.history],
                          batch_size=512,
-                         verbose=0)
+                         verbose=1)
             except Exception:
                 print(traceback.format_exc())
 
             with test_summary_writer.as_default():
                 tf.summary.scalar('loss', self.history.losses[-1], step=self.step)
+                tf.summary.scalar('qsa_error_loss', self.history.qsa_error_losses[-1], step=self.step)
+                tf.summary.scalar('word_prediction_loss', self.history.word_prediction_losses[-1], step=self.step)
                 tf.summary.scalar('num_trials', np.mean(num_trials), step=self.step)
+                tf.summary.scalar('reward', np.mean(replay_rewards), step=self.step)
 
             self.step += 1
