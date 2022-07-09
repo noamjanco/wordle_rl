@@ -1,6 +1,6 @@
 from state import GameState
 
-REWARD_WIN = 1000
+REWARD_WIN = 100
 REWARD_LOSE = -100
 
 def calc_reward(state: GameState, action: str) -> float:
