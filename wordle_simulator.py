@@ -19,6 +19,7 @@ class Play:
         rewards = []
         next_states = []
         actions_idx = []
+        hidden_words_idx = []
         while self.game_state.observed_state.trial < 6:
             states.append(copy.deepcopy(self.game_state.observed_state))
             action_idx = policy.calc_action(self.game_state.observed_state)
@@ -27,12 +28,13 @@ class Play:
             actions_idx.append(action_idx)
             reward = calc_reward(self.game_state, action)
             rewards.append(reward)
+            hidden_words_idx.append(self.game_state.hidden_word_idx)
             self.game_state.update(action_idx)
             next_states.append(copy.deepcopy(self.game_state.observed_state))
 
             if self.game_state.is_terminal_state():
                 break
-        return states, actions, rewards, next_states, actions_idx
+        return states, actions, rewards, next_states, actions_idx, hidden_words_idx
 
     def reset(self):
         self.game_state = GameState(self._all_words)
