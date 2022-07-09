@@ -15,12 +15,16 @@ class Policy:
         return self.epsilon_greedy_policy(observed_state, self.q_function, self.epsilon, self.num_words)
 
     @staticmethod
-    def epsilon_greedy_policy(state, q_sa, epsilon, num_words) -> [int]:
+    def epsilon_greedy_policy(state, q_sa, epsilon, num_words) -> int:
         if q_sa is None or np.random.rand() < epsilon:
             idx = np.random.choice(num_words)
             return idx
         else:
-            all_q_sa = q_sa.predict(preprocess(state))
+            all_q_sa = q_sa.predict(preprocess(state))[0]
+
+            # prevent selection of previously selected actions
+            if len(state.prev_actions_idx) > 0:
+                all_q_sa[np.array(state.prev_actions_idx)] = -1e6
 
             best_action_idx = np.argmax(all_q_sa)
             return best_action_idx

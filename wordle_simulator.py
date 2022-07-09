@@ -21,13 +21,13 @@ class Play:
         actions_idx = []
         while self.game_state.observed_state.trial < 6:
             states.append(copy.deepcopy(self.game_state.observed_state))
-            idx = policy.calc_action(self.game_state.observed_state)
-            action = self._all_words[idx]
+            action_idx = policy.calc_action(self.game_state.observed_state)
+            action = self._all_words[action_idx]
             actions.append(action)
-            actions_idx.append(idx)
+            actions_idx.append(action_idx)
             reward = calc_reward(self.game_state, action)
             rewards.append(reward)
-            self.game_state.update(action)
+            self.game_state.update(action_idx)
             next_states.append(copy.deepcopy(self.game_state.observed_state))
 
             if self.game_state.is_terminal_state():

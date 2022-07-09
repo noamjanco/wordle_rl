@@ -55,6 +55,7 @@ def build_q_sa_model(num_words: int):
     model.add(tf.keras.layers.Reshape((6,5*num_features),input_shape=(6,5,num_features)))
     # model.add(tf.keras.layers.Dense(32, activation='relu'))
     model.add(tf.keras.layers.Dense(32))
+    model.add(tf.keras.layers.LayerNormalization())
     model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
     # model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
     # model.add(keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8))
@@ -68,7 +69,7 @@ def build_q_sa_model(num_words: int):
     # model.add(layers.MaxPooling2D((2, 2)))
     model.add(tf.keras.layers.Flatten())
     model.add(tf.keras.layers.Dense(128, activation='relu'))
-
+    model.add(tf.keras.layers.LayerNormalization())
     model.add(tf.keras.layers.Dense(num_words))
     # states = keras.layers.Input((-1,6,5,4))
 

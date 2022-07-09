@@ -5,6 +5,7 @@ import numpy as np
 class ObservedState:
     def __init__(self):
         self.trial = 0
+        self.prev_actions_idx = []
         self.prev_actions_str = []
         self.prev_actions = np.zeros((6, 5))
         self.grey_letters = np.zeros((6, 5))
@@ -19,14 +20,17 @@ class GameState:
         """
         self.hidden_state = all_words[np.random.choice(len(all_words))]
         self.observed_state = ObservedState()
+        self.all_words = all_words
 
-    def update(self, action: str) -> None:
+    def update(self, action_idx: int) -> None:
         """
         Update game state given an action
-        :param action: action string, which is the guessed word.
+        :param action_idx: action index, which corresponds to the guessed word.
         :return: None.
         """
+        action = self.all_words[action_idx]
         self.observed_state.prev_actions_str.append(action)
+        self.observed_state.prev_actions_idx.append(action_idx)
         # action_letters = np.array([(ord(letter) - 0.5*(ord('z')+ ord('a')))/(ord('z') - ord('a')) for letter in str(action)[2:-1]])
         # self.observed_state.prev_actions[self.observed_state.trial] = action_letters
 

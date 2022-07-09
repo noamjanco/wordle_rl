@@ -33,8 +33,10 @@ class Trainer:
         self.step = 0
 
     def start(self):
+        self.run()
         p = multiprocessing.Process(name='trainer', target=self.run)
         p.start()
+
 
     def run(self):
         q_sa = build_q_sa_model(num_words=len(self.words))

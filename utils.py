@@ -13,6 +13,7 @@ def get_all_words(word_length: int = 5) -> List[str]:
 
     words = [word for word in words if len(word) == word_length]
     words = words[:20] # reaches ~3.5 num_trials in 30 steps
+    np.random.seed(1)
     # words = list(np.array(words)[np.random.choice(len(words),100,replace=False)])
     # words = list(np.array(words)[np.random.choice(len(words),500,replace=False)])
     return words
