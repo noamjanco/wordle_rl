@@ -39,4 +39,4 @@ if __name__ == '__main__':
                       epochs=epochs)
 
     data_collector.start()
-    trainer.start()
+    trainer.run()

@@ -36,11 +36,11 @@ class Trainer:
         self.epochs = epochs
         self.step = 0
 
-    def start(self):
-        #todo: roll back
-        self.run()
-        p = multiprocessing.Process(name='trainer', target=self.run)
-        p.start()
+    # def start(self):
+    #     #todo: roll back
+    #     self.run()
+    #     p = multiprocessing.Process(name='trainer', target=self.run)
+    #     p.start()
 
 
     def run(self):
@@ -100,7 +100,7 @@ class Trainer:
                          epochs=self.epochs,
                          callbacks=[self.history],
                          batch_size=512,
-                         verbose=1)
+                         verbose=0)
             except Exception:
                 print(traceback.format_exc())
 

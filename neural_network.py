@@ -94,7 +94,8 @@ def build_q_sa_model(num_words: int):
 
     model = Model(inputs=x, outputs=output)
 
-    opt = tf.keras.optimizers.SGD(learning_rate=0.00001) #previously working
+    # opt = tf.keras.optimizers.SGD(learning_rate=0.00001) #previously working
+    opt = tf.keras.optimizers.Adam(learning_rate=0.0001) #previously working
 
 
     model.compile(optimizer=opt, loss=total_loss, metrics=[qsa_error_loss_function, word_prediction_loss_function])
