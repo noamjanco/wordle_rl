@@ -12,8 +12,9 @@ def get_all_words(word_length: int = 5) -> List[str]:
     words = requests.get(word_site).content.splitlines()
 
     words = [word for word in words if len(word) == word_length]
-    words = words[:20] # reaches ~3.5 num_trials in 30 steps
+    # words = words[:20] # reaches ~3.5 num_trials in 30 steps
     np.random.seed(1)
-    # words = list(np.array(words)[np.random.choice(len(words),100,replace=False)])
+    # words = list(np.array(words)[np.random.choice(len(words),100,replace=False)]) #reached 3.8 in about 210 epochs
+    words = list(np.array(words)[np.random.choice(len(words),20,replace=False)]) #reached 4.9 in 18 epochs
     # words = list(np.array(words)[np.random.choice(len(words),500,replace=False)])
     return words

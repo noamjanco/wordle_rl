@@ -71,7 +71,7 @@ def word_prediction_loss_function(y_true,y_pred):
 def total_loss(y_true,y_pred):
     qsa_error_loss = qsa_error_loss_function(y_true, y_pred)
     word_prediction_loss = word_prediction_loss_function(y_true, y_pred)
-    return qsa_error_loss + 1000 * word_prediction_loss
+    return qsa_error_loss + 1 * word_prediction_loss
 
 def build_q_sa_model(num_words: int):
     x = tf.keras.layers.Input((6,5,num_features))
@@ -80,6 +80,8 @@ def build_q_sa_model(num_words: int):
     y = tf.keras.layers.Dense(32)(y)
     y = tf.keras.layers.LayerNormalization()(y)
     y = keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8)(y)
+    # y = keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8)(y)
+    # y = keras_nlp.layers.TransformerEncoder(intermediate_dim=64, num_heads=8)(y)
 
     y = tf.keras.layers.Flatten()(y)
     z = tf.keras.layers.Dense(128, activation='relu')(y)
