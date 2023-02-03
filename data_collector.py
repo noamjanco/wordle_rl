@@ -1,3 +1,5 @@
+from threading import Thread
+
 import tensorflow as tf
 import os
 from neural_network import preprocess, total_loss, qsa_error_loss_function, word_prediction_loss_function
@@ -9,6 +11,8 @@ from policy import Policy
 from wordle_simulator import Play
 import numpy as np
 import multiprocessing
+import ray
+import traceback
 
 def compute_td_targets(states, actions, rewards, next_states, prev_q_sa, gamma):
     targets = []
@@ -31,8 +35,51 @@ def compute_mc_targets(states, actions, rewards, next_states, gamma):
     return targets
 
 
-class DataCollector:
+@ray.remote(num_cpus=1)
+class DataCollectorActor(object):
+    def __init__(self, words, epsilon, gamma):
+        self.q_sa = None
+        self.words = words
+        self.epsilon = epsilon
+        self.gamma = gamma
+
+    def update_model(self, model_path):
+        # try:
+        self.q_sa = tf.keras.models.load_model(model_path, custom_objects={'total_loss': total_loss,
+                                                                      'qsa_error_loss_function': qsa_error_loss_function,
+                                                                      'word_prediction_loss_function': word_prediction_loss_function})
+        # except Exception as e:
+        #     print(traceback.format_exc())
+
+    def generate_samples(self, num_plays):
+        policy = Policy(self.epsilon, len(self.words), self.q_sa)
+        play = Play(self.words)
+
+        replay_states = []
+        replay_actions = []
+        replay_rewards = []
+        replay_next_states = []
+        replay_hidden_words_idx = []
+        td_targets = []
+        num_trials = []
+        for p in range(num_plays):
+            states, actions, rewards, next_states, actions_idx, hidden_words_idx = play.play(policy=policy)
+            # targets = compute_td_targets(states, actions, rewards, next_states, q_sa, gamma)
+            targets = compute_mc_targets(states, actions, rewards, next_states, self.gamma)
+
+            replay_states.extend(states)
+            replay_actions.extend(actions_idx)
+            replay_rewards.extend(rewards)
+            replay_next_states.extend(next_states)
+            td_targets.extend(targets)
+            replay_hidden_words_idx.extend(hidden_words_idx)
+            num_trials.append(len(states))
+
+        return replay_states, replay_actions, replay_rewards, replay_next_states, td_targets, num_trials, replay_hidden_words_idx
+
+class DataCollector(Thread):
     def __init__(self, words, num_iterations, epsilon, gamma, model_path, data_path, timeout = 100, n_jobs = 5, num_plays_in_node = 50):
+        Thread.__init__(self)
         self.words = words
         self.num_iterations = num_iterations
         self.epsilon = epsilon
@@ -42,10 +89,7 @@ class DataCollector:
         self.timeout = timeout
         self.n_jobs = n_jobs
         self.num_plays_in_node = num_plays_in_node
-
-    def start(self):
-        p = multiprocessing.Process(name='data_collector', target=self.run)
-        p.start()
+        self.workers = [DataCollectorActor.remote(self.words, self.epsilon, self.gamma) for _ in range(self.n_jobs)]
 
     def run(self):
         cnt = 0
@@ -59,8 +103,11 @@ class DataCollector:
         while cnt < self.num_iterations:
             print('Started generating data sample %d' % cnt)
             t = time.time()
-            results = Parallel(n_jobs=self.n_jobs)(delayed(self.worker_task)(self.gamma, self.epsilon, self.words, self.model_path, self.num_plays_in_node)
-                                                   for _ in range(self.n_jobs))
+            #todo: only update model on improved condition
+            _ = ray.get([worker.update_model.remote(self.model_path) for worker in self.workers])
+
+            results = ray.get([worker.generate_samples.remote(self.num_plays_in_node) for worker in self.workers])
+
             # results = [self.worker_task(self.gamma, self.epsilon, self.words, , self.model_path, self.num_plays_in_node)  for p in range(1)]
             dt = time.time() - t
             print('Finished generating data sampled %d, took %.2f seconds' % (cnt, dt))
@@ -71,44 +118,3 @@ class DataCollector:
             print('Finished generating data sample %d' % cnt)
             cnt += 1
         pass
-
-    def worker_task(self, gamma, epsilon, words, model_path, num_plays_in_node):
-        replay_states = []
-        replay_actions = []
-        replay_rewards = []
-        replay_next_states = []
-        replay_hidden_words_idx = []
-        td_targets = []
-        num_trials = []
-
-        timeout_cnt = 0
-        timeout = 3
-        while timeout_cnt < timeout:
-            try:
-                q_sa = tf.keras.models.load_model(model_path, custom_objects={'total_loss': total_loss,
-                                                                              'qsa_error_loss_function': qsa_error_loss_function,
-                                                                              'word_prediction_loss_function': word_prediction_loss_function})
-                break
-            except:
-                print('failed loading model due to race, sleeping for 3 seconds')
-                timeout_cnt += 1
-                time.sleep(3)
-        if timeout_cnt == timeout:
-            return [], [], [], [], [], []
-
-        policy = Policy(epsilon, len(words), q_sa)
-        play = Play(words)
-        for p in range(num_plays_in_node):
-            states, actions, rewards, next_states, actions_idx, hidden_words_idx = play.play(policy=policy)
-            # targets = compute_td_targets(states, actions, rewards, next_states, q_sa, gamma)
-            targets = compute_mc_targets(states, actions, rewards, next_states, gamma)
-
-            replay_states.extend(states)
-            replay_actions.extend(actions_idx)
-            replay_rewards.extend(rewards)
-            replay_next_states.extend(next_states)
-            td_targets.extend(targets)
-            replay_hidden_words_idx.extend(hidden_words_idx)
-            num_trials.append(len(states))
-
-        return replay_states, replay_actions, replay_rewards, replay_next_states, td_targets, num_trials, replay_hidden_words_idx

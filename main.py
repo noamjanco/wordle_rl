@@ -10,7 +10,7 @@ model_path = 'q_sa_model'
 timeout = 100
 
 replay_size = 5000
-n_jobs = 5
+n_jobs = 4
 num_plays_in_node = 50
 plays_per_file = n_jobs * num_plays_in_node
 replay_files = int(replay_size / plays_per_file)
