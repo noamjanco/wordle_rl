@@ -34,6 +34,7 @@ class Trainer:
         self._data_collector = data_collector
         self.min_generated_samples_before_training = min_generated_samples_before_training
         self.epoch_num = 0
+        self.gamma = 1
 
     def run(self):
         q_sa = build_q_sa_model(num_words=len(self.words))
@@ -53,8 +54,12 @@ class Trainer:
             replay_next_states = [el for result in results for el in result.next_states]
             replay_rewards = [el for result in results for el in result.rewards]
             replay_hidden_words_idx = [el for result in results for el in result.hidden_words_idx]
-            td_targets = [el for result in results for el in result.targets]
+            # td_targets = [el for result in results for el in result.targets]
             num_trials = [len(result.states) for result in results]
+
+            preprocessed_next_states = preprocess(replay_next_states)
+            next_states_value = np.max(q_sa.predict(preprocessed_next_states, verbose=0),axis=-1)
+            td_targets = np.asarray(replay_rewards) + self.gamma * next_states_value
 
             q_sa.fit(x=preprocess(replay_states),
                      y=np.array([td_targets, replay_actions, replay_hidden_words_idx]).T,

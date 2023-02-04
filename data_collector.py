@@ -16,7 +16,7 @@ from dataclasses import dataclass
 def compute_td_targets(states, actions, rewards, next_states, prev_q_sa, gamma):
     targets = []
     for s,a,r,s_tag in zip(states, actions, rewards, next_states):
-        targets.append(r + gamma * np.max(prev_q_sa.predict(preprocess(s_tag))))
+        targets.append(r + gamma * np.max(prev_q_sa.predict(preprocess(s_tag), verbose=0)))
     assert len(targets) == len(states)
 
     return targets
@@ -66,10 +66,11 @@ class DataCollectorActor(object):
         samples = []
         for p in range(num_plays):
             states, actions, rewards, next_states, actions_idx, hidden_words_idx = play.play(policy=policy)
-            # targets = compute_td_targets(states, actions, rewards, next_states, q_sa, self.gamma)
-            targets = compute_mc_targets(states, actions, rewards, next_states, self.gamma)
+            #todo: compute td targets in trainer with batch prediction, update targets each epoch
+            # targets = compute_td_targets(states, actions, rewards, next_states, self.q_sa, self.gamma)
+            #targets = compute_mc_targets(states, actions, rewards, next_states, self.gamma)
 
-            samples.append(DataCollectorSample(states, actions_idx, rewards, next_states, targets, hidden_words_idx))
+            samples.append(DataCollectorSample(states, actions_idx, rewards, next_states, None, hidden_words_idx))
 
         return samples
 
@@ -92,7 +93,7 @@ class DataCollector(Thread):
     def run(self):
         cnt = 0
         timeout_cnt = 0
-        while not os.path.exists(self.model_path):
+        while not os.path.exists(os.path.join(self.model_path,'saved_model.pb')):
             print('waiting for model path creation, sleeping for 10 seconds')
             time.sleep(10)
             timeout_cnt += 1
