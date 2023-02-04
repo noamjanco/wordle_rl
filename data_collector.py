@@ -80,7 +80,7 @@ class DataCollector(Thread):
         self.num_iterations = num_iterations
         self.epsilon = epsilon
         self.gamma = gamma
-        self.model_path = model_path
+        self.model_path = os.path.join(model_path, 'epoch_0')
         self.timeout = timeout
         self.n_jobs = n_jobs
         self.num_plays_in_node = num_plays_in_node

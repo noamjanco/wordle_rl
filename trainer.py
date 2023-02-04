@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 import tensorflow as tf
 import keras
@@ -32,23 +33,15 @@ class Trainer:
         self.step = 0
         self._data_collector = data_collector
         self.min_generated_samples_before_training = min_generated_samples_before_training
-
+        self.epoch_num = 0
 
     def run(self):
         q_sa = build_q_sa_model(num_words=len(self.words))
-
+        self.save_model(q_sa)
         log_dir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
         test_summary_writer = tf.summary.create_file_writer(log_dir)
-        while self.step < self.num_iterations:
-            print('saving last model')
-            try:
-                tf.keras.models.save_model(q_sa, self.model_path)
-            except:
-                print('race condition, sleep for 3 sec')
-                time.sleep(3)
-                continue
-            print('saving last model finished')
 
+        while self.epoch_num < self.num_iterations:
             results = self._data_collector.get_replay_buffer()
             if len(results) < self.min_generated_samples_before_training:
                 print('Collected %d samples, minimum is %d. sleeping for 10 seconds'%(len(results),self.min_generated_samples_before_training))
@@ -71,10 +64,25 @@ class Trainer:
                      verbose=0)
 
             with test_summary_writer.as_default():
-                tf.summary.scalar('loss', self.history.losses[-1], step=self.step)
-                tf.summary.scalar('qsa_error_loss', self.history.qsa_error_losses[-1], step=self.step)
-                tf.summary.scalar('word_prediction_loss', self.history.word_prediction_losses[-1], step=self.step)
-                tf.summary.scalar('num_trials', np.mean(num_trials), step=self.step)
-                tf.summary.scalar('reward', np.mean(replay_rewards), step=self.step)
+                tf.summary.scalar('loss', self.history.losses[-1], step=self.epoch_num)
+                tf.summary.scalar('qsa_error_loss', self.history.qsa_error_losses[-1], step=self.epoch_num)
+                tf.summary.scalar('word_prediction_loss', self.history.word_prediction_losses[-1], step=self.epoch_num)
+                tf.summary.scalar('num_trials', np.mean(num_trials), step=self.epoch_num)
+                tf.summary.scalar('reward', np.mean(replay_rewards), step=self.epoch_num)
 
-            self.step += 1
+            self.epoch_num += 1
+            self.save_model(q_sa)
+
+            #todo: insert target network update condition
+            if True:
+                self._data_collector.model_path = self.get_ckpt_path(self.epoch_num)
+
+    def get_ckpt_path(self, epoch_num):
+        return os.path.join(self.model_path, 'epoch_%d'%epoch_num)
+
+    def save_model(self, model):
+        model_ckp_path = self.get_ckpt_path(self.epoch_num)
+        if not os.path.exists(model_ckp_path):
+            os.makedirs(model_ckp_path)
+        tf.keras.models.save_model(model, model_ckp_path)
+        print('Epoch %d model saved.' % self.epoch_num)
