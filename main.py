@@ -17,6 +17,7 @@ replay_files = int(replay_size / plays_per_file)
 gamma = 1
 epsilon = 0.1
 epochs = 100
+min_generated_samples_before_training = 100
 
 if __name__ == '__main__':
     data_collector = DataCollector(words=words,
@@ -24,19 +25,20 @@ if __name__ == '__main__':
                                    epsilon=epsilon,
                                    gamma=gamma,
                                    model_path=model_path,
-                                   data_path=data_path,
                                    timeout=timeout,
                                    n_jobs=n_jobs,
-                                   num_plays_in_node=num_plays_in_node)
+                                   num_plays_in_node=num_plays_in_node,
+                                   replay_size=replay_size)
 
     trainer = Trainer(words=words,
                       num_iterations=num_iterations,
                       model_path=model_path,
-                      data_path=data_path,
                       replay_size=replay_size,
                       n_jobs=n_jobs,
                       num_plays_in_node=num_plays_in_node,
-                      epochs=epochs)
+                      epochs=epochs,
+                      data_collector=data_collector,
+                      min_generated_samples_before_training=min_generated_samples_before_training)
 
     data_collector.start()
     trainer.run()

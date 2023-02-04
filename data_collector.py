@@ -1,18 +1,17 @@
+import threading
 from threading import Thread
+from typing import List
 
 import tensorflow as tf
 import os
 from neural_network import preprocess, total_loss, qsa_error_loss_function, word_prediction_loss_function
 import time
-from joblib import Parallel, delayed
-import pickle
-
+import copy
 from policy import Policy
 from wordle_simulator import Play
 import numpy as np
-import multiprocessing
 import ray
-import traceback
+from dataclasses import dataclass
 
 def compute_td_targets(states, actions, rewards, next_states, prev_q_sa, gamma):
     targets = []
@@ -34,6 +33,18 @@ def compute_mc_targets(states, actions, rewards, next_states, gamma):
         print('error')
     return targets
 
+@dataclass
+class DataCollectorSample:
+    """
+    Dataclass for data collector sample, consists of states,
+    """
+    states: List[np.ndarray]
+    actions: List[np.ndarray]
+    rewards: List[np.ndarray]
+    next_states: List[np.ndarray]
+    targets: List[np.ndarray]
+    hidden_words_idx: List[np.ndarray]
+
 
 @ray.remote(num_cpus=1)
 class DataCollectorActor(object):
@@ -44,52 +55,39 @@ class DataCollectorActor(object):
         self.gamma = gamma
 
     def update_model(self, model_path):
-        # try:
         self.q_sa = tf.keras.models.load_model(model_path, custom_objects={'total_loss': total_loss,
                                                                       'qsa_error_loss_function': qsa_error_loss_function,
                                                                       'word_prediction_loss_function': word_prediction_loss_function})
-        # except Exception as e:
-        #     print(traceback.format_exc())
 
     def generate_samples(self, num_plays):
         policy = Policy(self.epsilon, len(self.words), self.q_sa)
         play = Play(self.words)
 
-        replay_states = []
-        replay_actions = []
-        replay_rewards = []
-        replay_next_states = []
-        replay_hidden_words_idx = []
-        td_targets = []
-        num_trials = []
+        samples = []
         for p in range(num_plays):
             states, actions, rewards, next_states, actions_idx, hidden_words_idx = play.play(policy=policy)
-            # targets = compute_td_targets(states, actions, rewards, next_states, q_sa, gamma)
+            # targets = compute_td_targets(states, actions, rewards, next_states, q_sa, self.gamma)
             targets = compute_mc_targets(states, actions, rewards, next_states, self.gamma)
 
-            replay_states.extend(states)
-            replay_actions.extend(actions_idx)
-            replay_rewards.extend(rewards)
-            replay_next_states.extend(next_states)
-            td_targets.extend(targets)
-            replay_hidden_words_idx.extend(hidden_words_idx)
-            num_trials.append(len(states))
+            samples.append(DataCollectorSample(states, actions_idx, rewards, next_states, targets, hidden_words_idx))
 
-        return replay_states, replay_actions, replay_rewards, replay_next_states, td_targets, num_trials, replay_hidden_words_idx
+        return samples
 
 class DataCollector(Thread):
-    def __init__(self, words, num_iterations, epsilon, gamma, model_path, data_path, timeout = 100, n_jobs = 5, num_plays_in_node = 50):
+    def __init__(self, words, num_iterations, epsilon, gamma, model_path, replay_size, timeout = 100, n_jobs = 5, num_plays_in_node = 50):
         Thread.__init__(self)
         self.words = words
         self.num_iterations = num_iterations
         self.epsilon = epsilon
         self.gamma = gamma
         self.model_path = model_path
-        self.data_path = data_path
         self.timeout = timeout
         self.n_jobs = n_jobs
         self.num_plays_in_node = num_plays_in_node
         self.workers = [DataCollectorActor.remote(self.words, self.epsilon, self.gamma) for _ in range(self.n_jobs)]
+        self._replay_buffer = []
+        self.replay_size = replay_size
+        self.lock = threading.Lock()
 
     def run(self):
         cnt = 0
@@ -102,19 +100,25 @@ class DataCollector(Thread):
 
         while cnt < self.num_iterations:
             print('Started generating data sample %d' % cnt)
-            t = time.time()
             #todo: only update model on improved condition
             _ = ray.get([worker.update_model.remote(self.model_path) for worker in self.workers])
 
+            t = time.time()
             results = ray.get([worker.generate_samples.remote(self.num_plays_in_node) for worker in self.workers])
-
-            # results = [self.worker_task(self.gamma, self.epsilon, self.words, , self.model_path, self.num_plays_in_node)  for p in range(1)]
+            results = [item for sublist in results for item in sublist]
             dt = time.time() - t
             print('Finished generating data sampled %d, took %.2f seconds' % (cnt, dt))
-            if not os.path.exists(self.data_path):
-                os.makedirs(self.data_path)
-            with open(self.data_path + '%d.pkl' % cnt, 'wb') as file:
-                pickle.dump(results, file)
-            print('Finished generating data sample %d' % cnt)
+
+
+            with self.lock:
+                self._replay_buffer.extend(results)
+                if len(self._replay_buffer) > self.replay_size:
+                    self._replay_buffer = self._replay_buffer[-self.replay_size:]
+
+            print('Replay buffer updated with %d samples' % len(results))
             cnt += 1
         pass
+
+    def get_replay_buffer(self):
+        with self.lock:
+            return copy.copy(self._replay_buffer)
